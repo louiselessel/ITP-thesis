@@ -47,9 +47,17 @@ AccelStepper stepper2 = AccelStepper(MotorInterfaceType, motorPin8, motorPin10, 
 
 // Globals
 
+const int SWITCHPIN = 0;  // the number of the pushbutton pin
+int buttonState = 0;
+
 
 
 void setup() {
+  // switch
+  // declare pin to be an input:
+  pinMode(0, INPUT_PULLUP);
+
+
   // Set the maximum steps per second:
   // Speeds of more than 1000 steps per second can be unreliable.
   stepper.setMaxSpeed(1000);
@@ -61,27 +69,33 @@ void setup() {
   Serial.begin(9600);
 }
 
-
-
 // my code
 void loop() {
-
-  // move 20% rev
-  int stepsToMove = calcSteps (0.2);
-
-  arm();
-  delay(100);
   
+  // zero position always same
+  // switch check
+  buttonState = digitalRead(0);
+  //Serial.println(buttonState);
+
+  stepper.setSpeed(500);
+
+  if (buttonState == 0) {
+    Serial.println("Button");
+  } else
+  {
+    Serial.println(" ");
+    stepper.run();
+  }
+  
+
   /*
     Serial.println("Accel+");
     mAccel(stepsToMove);
     delay(1000);
 
-
     Serial.println("Accel-");
     mAccel(0);
     delay(1000);
-
 
     Serial.println("Constant");
     mConstant(4096, 500);
@@ -93,8 +107,20 @@ void loop() {
 }
 
 //arm
-void arm() {
+void sadArm() {
+  // move 20% rev
+  int stepsToMove = calcSteps (0.2);
+  Serial.println("Accel+");
+  mAccel(stepsToMove);
+  delay(1000);
 
+  Serial.println("Accel-");
+  mAccel(0);
+  delay(1000);
+}
+
+
+void mInit() {
 }
 
 
