@@ -49,7 +49,7 @@ AccelStepper stepper2 = AccelStepper(MotorInterfaceType, motorPin8, motorPin10, 
 
 const int SWITCHPIN = 0;  // the number of the pushbutton pin
 int buttonState = 0;
-
+bool initialize = true;
 
 
 void setup() {
@@ -71,22 +71,24 @@ void setup() {
 
 // my code
 void loop() {
-  
-  // zero position always same
+
+  // TO DO
+  // zero position always same - 
+  // attach switch 
+  // check out multistepper library for running several motors at the same time
+  // program arm motor
+  // program
+
   // switch check
   buttonState = digitalRead(0);
   //Serial.println(buttonState);
 
-  stepper.setSpeed(500);
-
-  if (buttonState == 0) {
-    Serial.println("Button");
-  } else
-  {
-    Serial.println(" ");
-    stepper.run();
+  if (initialize == true) {
+    initToZeroPos();
   }
-  
+
+  // down is negative
+
 
   /*
     Serial.println("Accel+");
@@ -120,7 +122,31 @@ void sadArm() {
 }
 
 
-void mInit() {
+void initToZeroPos() {
+  //turn clockwise until hit switch
+  stepper.setSpeed(500);
+
+  if (buttonState == 0) {
+    Serial.println("Switch Hit - arm");
+    stepper.setCurrentPosition(0);
+    initialize = false;
+    Serial.println(stepper.currentPosition());
+  } else {
+    Serial.println(stepper.currentPosition());
+    stepper.run();
+  }
+}
+
+void mRunUntil_switchHit () {
+  stepper.setSpeed(500);
+
+  if (buttonState == 0) {
+    Serial.println("Button");
+    stepper.setCurrentPosition(0);
+  } else {
+    Serial.println(stepper.currentPosition());
+    stepper.run();
+  }
 }
 
 
