@@ -12,6 +12,17 @@
   // 30,000 /4096 = 7.32 rpm
 */
 
+
+
+/*
+   IMPORTANT !!!!!!!!!!!!!!!!!
+   plug in motor first. Then Arduino. To make sure the zero position is set acurately!
+*/
+
+
+
+
+
 // Include the AccelStepper library:
 #include <AccelStepper.h>
 
@@ -57,7 +68,6 @@ void setup() {
   // declare pin to be an input:
   pinMode(0, INPUT_PULLUP);
 
-
   // Set the maximum steps per second:
   // Speeds of more than 1000 steps per second can be unreliable.
   stepper.setMaxSpeed(1000);
@@ -66,6 +76,15 @@ void setup() {
   // Set the maximum acceleration in steps per second^2:
   stepper.setAcceleration(200);
 
+  // Set the maximum steps per second:
+  // Speeds of more than 1000 steps per second can be unreliable.
+  stepper1.setMaxSpeed(1000);
+  stepper1.setSpeed(500);
+
+  // Set the maximum acceleration in steps per second^2:
+  stepper1.setAcceleration(200);
+
+
   Serial.begin(9600);
 }
 
@@ -73,21 +92,28 @@ void setup() {
 void loop() {
 
   // TO DO
-  // zero position always same - 
-  // attach switch 
+  // zero position always same -
+  // attach switch - better 
   // check out multistepper library for running several motors at the same time
   // program arm motor
   // program
 
   // switch check
   buttonState = digitalRead(0);
-  //Serial.println(buttonState);
+  Serial.println(buttonState);
+  
+  stepper1.setSpeed(500);
+  stepper1.run();
 
-  if (initialize == true) {
-    initToZeroPos();
-  }
+  /*
+    if (initialize == true) {
+      initToZeroPos();
+    }
+    else {
+      sadArm();
+    }
+  */
 
-  // down is negative
 
 
   /*
@@ -110,6 +136,18 @@ void loop() {
 
 //arm
 void sadArm() {
+  // move 20% rev
+  int stepsToMove = calcSteps (0.4);
+  Serial.println("Accel down");
+  mAccel(-stepsToMove);
+  delay(1000);
+
+  Serial.println("Accel to 0");
+  mAccel(0);
+  delay(1000);
+}
+
+void test() {
   // move 20% rev
   int stepsToMove = calcSteps (0.2);
   Serial.println("Accel+");
