@@ -4,6 +4,7 @@
 
   AccelStepper reference:
   https://www.airspayce.com/mikem/arduino/AccelStepper/classAccelStepper.html#a73bdecf1273d98d8c5fbcb764cabeea5
+  https://www.airspayce.com/mikem/arduino/AccelStepper/classMultiStepper.html
 
   // Calculations:
   // In half step mode (8), one revolution takes 4096 steps
@@ -51,37 +52,35 @@
 //FULL4WIRE = 4, HALF4WIRE = 8
 
 // Initialize with pin sequence IN1-IN3-IN2-IN4 for using the AccelStepper library with 28BYJ-48 stepper motor:
-AccelStepper stepper = AccelStepper(MotorInterfaceType, motorPin0, motorPin2, motorPin1, motorPin3);
+AccelStepper stepper2 = AccelStepper(MotorInterfaceType, motorPin0, motorPin2, motorPin1, motorPin3);
 AccelStepper stepper1 = AccelStepper(MotorInterfaceType, motorPin4, motorPin6, motorPin5, motorPin7);
-AccelStepper stepper2 = AccelStepper(MotorInterfaceType, motorPin8, motorPin10, motorPin9, motorPin11);
+AccelStepper stepper = AccelStepper(MotorInterfaceType, motorPin8, motorPin10, motorPin9, motorPin11);
 
 
 // Globals
 
 const int SWITCHPIN = 0;  // the number of the pushbutton pin
-int buttonState = 0;
+int buttonState0 = 0;
+int buttonState1 = 0;
 bool initialize = true;
+bool initialize1 = true;
 
 
 void setup() {
   // switch
   // declare pin to be an input:
   pinMode(0, INPUT_PULLUP);
+  pinMode(A5, INPUT_PULLUP);
 
   // Set the maximum steps per second:
   // Speeds of more than 1000 steps per second can be unreliable.
   stepper.setMaxSpeed(1000);
   stepper.setSpeed(500);
-
   // Set the maximum acceleration in steps per second^2:
   stepper.setAcceleration(200);
 
-  // Set the maximum steps per second:
-  // Speeds of more than 1000 steps per second can be unreliable.
   stepper1.setMaxSpeed(1000);
   stepper1.setSpeed(500);
-
-  // Set the maximum acceleration in steps per second^2:
   stepper1.setAcceleration(200);
 
 
@@ -93,28 +92,67 @@ void loop() {
 
   // TO DO
   // zero position always same -
-  // attach switch - better 
-  // check out multistepper library for running several motors at the same time
-  // program arm motor
-  // program
+  // attach switch -
+  // check out multistepper library for running several motors at the same time -
+  // program arm motor - 
+  // program leaves
+
 
   // switch check
-  buttonState = digitalRead(0);
-  Serial.println(buttonState);
-  
-  stepper1.setSpeed(500);
-  stepper1.run();
+  buttonState0 = digitalRead(0);
+  Serial.print(" read_0: ");
+  Serial.println(buttonState0);
+
+
+
+  buttonState1 = digitalRead(A5);
+  Serial.print(" read_1: ");
+  Serial.println(buttonState1);
+  Serial.println(" ");
 
   /*
-    if (initialize == true) {
-      initToZeroPos();
-    }
-    else {
-      sadArm();
-    }
+    //stepper.setSpeed(500);
+    stepper.moveTo(4096);
+    stepper.run();
+
+
+    stepper1.setSpeed(500);
+    stepper1.runSpeed();
   */
 
 
+  if (initialize == true) {
+    initToZeroPos();
+  }
+  else {
+    sadArm();
+  }
+
+  if (initialize1 == true) {
+    initToZeroPosArm();
+  }
+  else {
+    //sadArm();
+    Serial.println("______");
+  }
+
+
+  /* library notes */
+  /* accel + can run simultaneously, but is dependent on loop, so println will harm speed */
+  // run() - needs a targetpos:   stepper.moveTo(4096);
+  /* expensive calls - harm run! */
+  //Serial.println(stepper.currentPosition());
+  //Serial.println("speed: " + String(stepper.speed()));
+  /* can be used to check did the stepper stop at position? */
+  //Serial.println(stepper.isRunning ());
+
+  /* constant + can run simultaneously */
+  // runSpeed()
+  // runSpeedToPosition()
+
+  /* accel + blocks */
+  // runToNewPosition() // to target
+  // runToPosition()
 
   /*
     Serial.println("Accel+");
@@ -131,7 +169,6 @@ void loop() {
     stepper.setCurrentPosition(0);
     delay(1000);
   */
-
 }
 
 //arm
@@ -164,21 +201,37 @@ void initToZeroPos() {
   //turn clockwise until hit switch
   stepper.setSpeed(500);
 
-  if (buttonState == 0) {
+  if (buttonState0 == 0) {
     Serial.println("Switch Hit - arm");
     stepper.setCurrentPosition(0);
     initialize = false;
-    Serial.println(stepper.currentPosition());
+    //Serial.println(stepper.currentPosition());
   } else {
-    Serial.println(stepper.currentPosition());
+    //Serial.println(stepper.currentPosition());
     stepper.run();
   }
 }
 
+void initToZeroPosArm() {
+  //turn clockwise until hit switch
+  stepper1.setSpeed(-500);
+
+  if (buttonState1 == 0) {
+    Serial.println("Switch Hit - arm");
+    stepper1.setCurrentPosition(0);
+    initialize1 = false;
+    //Serial.println(stepper1.currentPosition());
+  } else {
+    //Serial.println(stepper1.currentPosition());
+    stepper1.run();
+  }
+}
+
+
 void mRunUntil_switchHit () {
   stepper.setSpeed(500);
 
-  if (buttonState == 0) {
+  if (buttonState0 == 0) {
     Serial.println("Button");
     stepper.setCurrentPosition(0);
   } else {
