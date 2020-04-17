@@ -52,10 +52,11 @@
 //FULL4WIRE = 4, HALF4WIRE = 8
 
 // Initialize with pin sequence IN1-IN3-IN2-IN4 for using the AccelStepper library with 28BYJ-48 stepper motor:
-AccelStepper stepper2 = AccelStepper(MotorInterfaceType, motorPin0, motorPin2, motorPin1, motorPin3);
+AccelStepper stepper = AccelStepper(MotorInterfaceType, motorPin0, motorPin2, motorPin1, motorPin3);
 AccelStepper stepper1 = AccelStepper(MotorInterfaceType, motorPin4, motorPin6, motorPin5, motorPin7);
-AccelStepper stepper = AccelStepper(MotorInterfaceType, motorPin8, motorPin10, motorPin9, motorPin11);
+AccelStepper stepper2 = AccelStepper(MotorInterfaceType, motorPin8, motorPin10, motorPin9, motorPin11);
 
+AccelStepper s[3];
 
 // Globals
 
@@ -69,72 +70,87 @@ bool initialize1 = true;
 void setup() {
   // switch
   // declare pin to be an input:
-  pinMode(0, INPUT_PULLUP);
+  pinMode(A4, INPUT_PULLUP);
   pinMode(A5, INPUT_PULLUP);
 
+  // setup steppers
+  s[0] = stepper;
   // Set the maximum steps per second:
   // Speeds of more than 1000 steps per second can be unreliable.
-  stepper.setMaxSpeed(1000);
-  stepper.setSpeed(500);
+  s[0].setMaxSpeed(1000);
+  s[0].setSpeed(500);
   // Set the maximum acceleration in steps per second^2:
-  stepper.setAcceleration(200);
+  s[0].setAcceleration(200);
 
-  stepper1.setMaxSpeed(1000);
-  stepper1.setSpeed(500);
-  stepper1.setAcceleration(200);
+
+  s[1] = stepper1;
+  s[1].setMaxSpeed(1000);
+  s[1].setSpeed(500);
+  s[1].setAcceleration(200);
+
+  s[2] = stepper2;
+  s[2].setMaxSpeed(1000);
+  s[2].setSpeed(500);
+  s[2].setAcceleration(200);
 
 
   Serial.begin(9600);
+  Serial.println("Started---------");
+
+  /*
+    s[0].moveTo(-1000);
+    s[0].runToPosition();
+
+
+    s[1].moveTo(1000);
+    s[1].runToPosition();
+  */
 }
 
-// my code
+
+
 void loop() {
 
   // TO DO
   // zero position always same -
   // attach switch -
   // check out multistepper library for running several motors at the same time -
-  // program arm motor - 
+  // program arm motor -
+  // change design to equip leaves
   // program leaves
+  // presence sensor
+  // change setting of zero points to potentiometers
+  
 
 
-  // switch check
-  buttonState0 = digitalRead(0);
-  Serial.print(" read_0: ");
-  Serial.println(buttonState0);
-
-
+  // switches check
+  buttonState0 = digitalRead(A4);
+  //Serial.print(" read_0: ");
+  //Serial.println(buttonState0);
 
   buttonState1 = digitalRead(A5);
-  Serial.print(" read_1: ");
-  Serial.println(buttonState1);
-  Serial.println(" ");
-
-  /*
-    //stepper.setSpeed(500);
-    stepper.moveTo(4096);
-    stepper.run();
+  //Serial.print(" read_1: ");
+  //Serial.println(buttonState1);
+  //Serial.println(" ");
 
 
-    stepper1.setSpeed(500);
-    stepper1.runSpeed();
-  */
 
-
+  // Initialize
   if (initialize == true) {
-    initToZeroPos();
+    initToZeroPos_main(0);
   }
   else {
-    sadArm();
+    if (initialize1 == true) {
+      initToZeroPos_extended(1);
+    }
+    else {
+      sadArm(1);
+      sadArm(2);
+    }
   }
 
-  if (initialize1 == true) {
-    initToZeroPosArm();
-  }
-  else {
-    //sadArm();
-    Serial.println("______");
-  }
+
+
 
 
   /* library notes */
@@ -169,97 +185,110 @@ void loop() {
     stepper.setCurrentPosition(0);
     delay(1000);
   */
+
+
+  //Serial.println(sA[0].isRunning ());
+  /*
+    //s[2].setSpeed(500);
+    s[2].moveTo(4096);
+    s[2].run();
+
+
+    s[2].setSpeed(500);
+    s[2].runSpeed();
+  */
+
+  /*
+    int stepsToMove = calcSteps (0.5);
+    Serial.println("Accel down");
+    mAccel(-stepsToMove, 2);
+    delay(1000);
+
+    Serial.println("Accel to 0");
+    mAccel(0, 2);
+    delay(1000);
+  */
 }
 
-//arm
-void sadArm() {
-  // move 20% rev
-  int stepsToMove = calcSteps (0.4);
+
+
+void sadArm(int _stepper) {
+  // move rev
+  int stepsToMove = calcSteps (0.2);
   Serial.println("Accel down");
-  mAccel(-stepsToMove);
+  mAccel(stepsToMove, _stepper);
   delay(1000);
 
   Serial.println("Accel to 0");
-  mAccel(0);
-  delay(1000);
-}
-
-void test() {
-  // move 20% rev
-  int stepsToMove = calcSteps (0.2);
-  Serial.println("Accel+");
-  mAccel(stepsToMove);
-  delay(1000);
-
-  Serial.println("Accel-");
-  mAccel(0);
+  mAccel(0, _stepper);
   delay(1000);
 }
 
 
-void initToZeroPos() {
+void initToZeroPos_main(int _stepper) {
   //turn clockwise until hit switch
-  stepper.setSpeed(500);
+  s[_stepper].setSpeed(500);
 
   if (buttonState0 == 0) {
-    Serial.println("Switch Hit - arm");
-    stepper.setCurrentPosition(0);
+    Serial.println("Switch Hit - main");
+    s[_stepper].setCurrentPosition(0);
     initialize = false;
-    //Serial.println(stepper.currentPosition());
+    //Serial.println(s[_stepper].currentPosition());
   } else {
-    //Serial.println(stepper.currentPosition());
-    stepper.run();
+    //Serial.println(s[_stepper].currentPosition());
+    s[_stepper].run();
   }
 }
 
-void initToZeroPosArm() {
+void initToZeroPos_extended(int _stepper) {
   //turn clockwise until hit switch
-  stepper1.setSpeed(-500);
+  s[_stepper].setSpeed(-500);
 
   if (buttonState1 == 0) {
-    Serial.println("Switch Hit - arm");
-    stepper1.setCurrentPosition(0);
+    Serial.println("Switch Hit - extended");
+    s[_stepper].setCurrentPosition(0);
     initialize1 = false;
-    //Serial.println(stepper1.currentPosition());
+    //Serial.println(s[_stepper].currentPosition());
   } else {
-    //Serial.println(stepper1.currentPosition());
-    stepper1.run();
+    //Serial.println(s[_stepper].currentPosition());
+    s[_stepper].run();
   }
 }
 
 
-void mRunUntil_switchHit () {
-  stepper.setSpeed(500);
+void mRunUntil_switchHit (int _stepper) {
+  s[_stepper].setSpeed(500);
 
   if (buttonState0 == 0) {
     Serial.println("Button");
-    stepper.setCurrentPosition(0);
+    s[_stepper].setCurrentPosition(0);
   } else {
-    Serial.println(stepper.currentPosition());
-    stepper.run();
+    Serial.println(s[_stepper].currentPosition());
+    s[_stepper].run();
   }
 }
 
 
-void mAccel(int targetPos) {
+void mAccel(int targetPos, int _stepper) {
   // Set target position:
-  stepper.moveTo(targetPos);
+  s[_stepper].moveTo(targetPos);
 
   // Run to position with set speed and acceleration:
-  stepper.runToPosition();
+  s[_stepper].runToPosition();
 
-  Serial.println("speed: " + String(stepper.speed()));
+  Serial.println("speed: " + String(s[_stepper].speed()));
 }
 
-void mConstant(int _steps, int _speed) {
-  while (stepper.currentPosition() != _steps) {
-    stepper.setSpeed(_speed);
-    stepper.runSpeed();
+
+void mConstant(int _steps, int _speed, int _stepper) {
+  while (s[_stepper].currentPosition() != _steps) {
+    s[_stepper].setSpeed(_speed);
+    s[_stepper].runSpeed();
   }
-  Serial.println("speed: " + String(stepper.speed()));
+  Serial.println("speed: " + String(s[_stepper].speed()));
 }
 
-int calcSteps(float rev) {
+int calcSteps(float rev) { // Ex. 0.2 = 20% rev, 1 = 100% (one rev), 2 = 200% (2 rev)
   int steps = 0;
   steps = int(4096 * rev);
   return steps;
