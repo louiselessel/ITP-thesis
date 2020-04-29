@@ -11,9 +11,13 @@
   // so 500 steps/sec results in roughly 7 rpm.
   // 500*60s = 30,000 steps in 1 minute
   // 30,000 /4096 = 7.32 rpm
+
+  Neopixels library
+  https://github.com/adafruit/Adafruit_NeoPixel
+
+  Human_Presence_Sensor-AK9753 from Sparkfun or Groove
+  http://wiki.seeedstudio.com/Grove-Human_Presence_Sensor-AK9753/
 */
-
-
 
 /*
    IMPORTANT !!!!!!!!!!!!!!!!!
@@ -21,14 +25,16 @@
 */
 
 
-
-
-
-// Include the AccelStepper library:
+#include <Adafruit_NeoPixel.h>
 #include <AccelStepper.h>
+#include <Wire.h>
+#include "Grove_Human_Presence_Sensor.h"
 
-// Motor pin definitions:
+// LED Neopixels
+#define PIN A2         //defining the PWM pin
+#define N_LEDS 3      //number of LED units on the strip
 
+// Motor pins:
 // Stepper - main
 #define motorPin0  2      // IN1 on the ULN2003 driver // note: doesn't work when starting from pin 0 and 1
 #define motorPin1  3      // IN2 on the ULN2003 driver
@@ -58,9 +64,32 @@ AccelStepper stepper2 = AccelStepper(MotorInterfaceType, motorPin8, motorPin10, 
 
 AccelStepper s[3];
 
-// Globals
 
-const int SWITCHPIN = 0;  // the number of the pushbutton pin
+// Initialize LED neopixels
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(N_LEDS, PIN); //declared neopixel object
+
+// Initialize sensor
+AK9753 movementSensor;
+
+
+/* Globals */
+// LED
+int r = 10;
+int g = 10;
+int b = 10;
+
+// Movement Sensor
+// You need to adjust these sensitivities lower if you want to detect more far
+// but it will introduce more error detection
+float sensitivity_presence = 6.0;
+float sensitivity_movement = 10.0;
+int detect_interval = 30; //milliseconds
+PresenceDetector detector(movementSensor, sensitivity_presence, sensitivity_movement, detect_interval);
+uint32_t last_time;
+
+// switches
+const int init_switch0 = A0;
+const int init_switch1 = A1;
 int buttonState0 = 0;
 int buttonState1 = 0;
 bool initialize = true;
@@ -68,10 +97,27 @@ bool initialize1 = true;
 
 
 void setup() {
-  // switch
-  // declare pin to be an input:
-  pinMode(A4, INPUT_PULLUP);
-  pinMode(A5, INPUT_PULLUP);
+  Serial.begin(9600);
+  Wire.begin();
+
+  // setup switches
+  pinMode(init_switch0, INPUT_PULLUP);
+  pinMode(init_switch1, INPUT_PULLUP);
+
+  // setup LED
+  // Initialize the NeoPixel library.
+  strip.begin();
+  for (int i = 0; i <= N_LEDS; i++) {
+    strip.setPixelColor(i, 0, 0, 0);
+  }
+  strip.show();
+
+  // setup movement sensor
+  if (movementSensor.initialize() == false) {
+    Serial.println("Device not found. Check wiring.");
+    while (1);
+  }
+  last_time = millis();
 
   // setup steppers
   s[0] = stepper;
@@ -81,7 +127,6 @@ void setup() {
   s[0].setSpeed(500);
   // Set the maximum acceleration in steps per second^2:
   s[0].setAcceleration(200);
-
 
   s[1] = stepper1;
   s[1].setMaxSpeed(1000);
@@ -94,13 +139,12 @@ void setup() {
   s[2].setAcceleration(200);
 
 
-  Serial.begin(9600);
   Serial.println("Started---------");
 
   /*
+    // inital motor positions (DEBUG)
     s[0].moveTo(-1000);
     s[0].runToPosition();
-
 
     s[1].moveTo(1000);
     s[1].runToPosition();
@@ -111,47 +155,80 @@ void setup() {
 
 void loop() {
 
-  // TO DO
-  // zero position always same -
-  // attach switch -
-  // check out multistepper library for running several motors at the same time -
-  // program arm motor -
-  // change design to equip leaves
-  // program leaves
-  // presence sensor
-  // change setting of zero points to potentiometers
-  
+  // Check movement sensor
+  detector.loop();
+
+  uint32_t now = millis();
+  if (now - last_time > 100) {
+    uint8_t m = detector.getMovement();  //read movement state will clear it
+
+    // PLOTTER
+    // movement 1-3 (up down) in blue
+    Serial.print(detector.getDerivativeOfDiff13());
+    Serial.print(" ");
+
+    //plot a pulse 1-3 - red spikes
+    if (m & MOVEMENT_FROM_1_TO_3) {
+      Serial.print("20 ");
+    } else if (m & MOVEMENT_FROM_3_TO_1) {
+      Serial.print("-20 ");
+    } else {
+      Serial.print("0 ");
+    }
+
+    // movement 2-4 (left - right) in green
+    Serial.print(detector.getDerivativeOfDiff24());
+    Serial.print(" ");
+
+    //plot a pulse for 2-4 - orange spikes
+    if (m & MOVEMENT_FROM_2_TO_4) {
+      Serial.println("20 ");
+    } else if (m & MOVEMENT_FROM_4_TO_2) {
+      Serial.println("-20 ");
+    } else {
+      Serial.println("0 ");
+    }
+    last_time = now;
+  }
+
 
 
   // switches check
-  buttonState0 = digitalRead(A4);
-  //Serial.print(" read_0: ");
-  //Serial.println(buttonState0);
+  buttonState0 = digitalRead(init_switch0);
+  buttonState1 = digitalRead(init_switch1);
+  /*
+    Serial.print(" read_0: ");
+    Serial.println(buttonState0);
+    Serial.print(" read_1: ");
+    Serial.println(buttonState1);
+    Serial.println(" ");
+  */
 
-  buttonState1 = digitalRead(A5);
-  //Serial.print(" read_1: ");
-  //Serial.println(buttonState1);
-  //Serial.println(" ");
-
-
-
-  // Initialize
-  if (initialize == true) {
-    initToZeroPos_main(0);
+  // LED update
+  for (int i = 0; i <= N_LEDS; i++) {
+    strip.setPixelColor(i, r, g, b);
   }
-  else {
-    if (initialize1 == true) {
-      initToZeroPos_extended(1);
+  strip.show();
+
+  delay(1);
+
+
+
+  /*
+    // Initialize
+    if (initialize == true) {
+      initToZeroPos_main(0);
     }
     else {
-      sadArm(1);
-      sadArm(0);
+      if (initialize1 == true) {
+        initToZeroPos_extended(1);
+      }
+      else {
+        sadArm(1);
+        sadArm(0);
+      }
     }
-  }
-
-
-
-
+  */
 
   /* library notes */
   /* accel + can run simultaneously, but is dependent on loop, so println will harm speed */
