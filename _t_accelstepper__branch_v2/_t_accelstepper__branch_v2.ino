@@ -86,6 +86,7 @@ float sensitivity_movement = 10.0;
 int detect_interval = 30; //milliseconds
 PresenceDetector detector(movementSensor, sensitivity_presence, sensitivity_movement, detect_interval);
 uint32_t last_time;
+int health = 0;
 
 // switches
 const int init_switch0 = A0;
@@ -163,7 +164,7 @@ void loop() {
     uint8_t m = detector.getMovement();  //read movement state will clear it
 
     // PLOTTER
-    // movement 1-3 (up down) in blue
+    // movement 1-3 (up - down) in blue
     Serial.print(detector.getDerivativeOfDiff13());
     Serial.print(" ");
 
@@ -183,8 +184,10 @@ void loop() {
     //plot a pulse for 2-4 - orange spikes
     if (m & MOVEMENT_FROM_2_TO_4) {
       Serial.println("20 ");
+      health += 20;
     } else if (m & MOVEMENT_FROM_4_TO_2) {
       Serial.println("-20 ");
+      health -= 20;
     } else {
       Serial.println("0 ");
     }
@@ -205,8 +208,12 @@ void loop() {
   */
 
   // LED update
+  r = constrain (health, 0, 200);
+  Serial.println(r);
+  
   for (int i = 0; i <= N_LEDS; i++) {
-    strip.setPixelColor(i, r, g, b);
+    //strip.setPixelColor(i, r, g, b);
+    strip.setPixelColor(i, r, 0, 0);
   }
   strip.show();
 
