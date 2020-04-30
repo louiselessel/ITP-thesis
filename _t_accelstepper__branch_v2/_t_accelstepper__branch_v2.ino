@@ -21,7 +21,7 @@
 
 /*
    IMPORTANT !!!!!!!!!!!!!!!!!
-   plug in motor first. Then Arduino. To make sure the zero position is set acurately!
+   Always set zero positions on buttons when installation starts.
 */
 
 
@@ -31,7 +31,7 @@
 #include "Grove_Human_Presence_Sensor.h"
 
 // LED Neopixels
-#define PIN A2         //defining the PWM pin
+#define PIN A3         //defining the PWM pin
 #define N_LEDS 3      //number of LED units on the strip
 
 // Motor pins:
@@ -74,9 +74,9 @@ AK9753 movementSensor;
 
 /* Globals */
 // LED
-int r = 10;
-int g = 10;
-int b = 10;
+int r = 255;
+int g = 255;
+int b = 255;
 
 // Movement Sensor
 // You need to adjust these sensitivities lower if you want to detect more far
@@ -86,15 +86,30 @@ float sensitivity_movement = 10.0;
 int detect_interval = 30; //milliseconds
 PresenceDetector detector(movementSensor, sensitivity_presence, sensitivity_movement, detect_interval);
 uint32_t last_time;
-int health = 0;
+int sensorCheckTime = 100;
 
-// switches
+// Switches
 const int init_switch0 = A0;
 const int init_switch1 = A1;
+const int init_switch2 = A2;
+
 int buttonState0 = 0;
 int buttonState1 = 0;
+int buttonState2 = 0;
 bool initialize = true;
 bool initialize1 = true;
+
+// Motors
+bool init0 = false;
+bool init1 = false;
+
+// Logic
+int health = 100;
+int healthVal = 1;
+uint32_t recoveryTime = 5000;
+uint32_t last_time_hurt;
+bool mThreshold = false;
+int ledBri = 255;
 
 
 void setup() {
@@ -104,6 +119,7 @@ void setup() {
   // setup switches
   pinMode(init_switch0, INPUT_PULLUP);
   pinMode(init_switch1, INPUT_PULLUP);
+  pinMode(init_switch2, INPUT_PULLUP);
 
   // setup LED
   // Initialize the NeoPixel library.
@@ -139,6 +155,14 @@ void setup() {
   s[2].setSpeed(500);
   s[2].setAcceleration(200);
 
+  init0 = false;
+  init1 = false;
+
+  // set initial positions - make sure to adjust on buttons after startup
+  // until the branch is straight
+  s[0].setCurrentPosition(0);
+  s[1].setCurrentPosition(0);
+
 
   Serial.println("Started---------");
 
@@ -160,7 +184,7 @@ void loop() {
   detector.loop();
 
   uint32_t now = millis();
-  if (now - last_time > 100) {
+  if (now - last_time > sensorCheckTime) {
     uint8_t m = detector.getMovement();  //read movement state will clear it
 
     // PLOTTER
@@ -171,8 +195,10 @@ void loop() {
     //plot a pulse 1-3 - red spikes
     if (m & MOVEMENT_FROM_1_TO_3) {
       Serial.print("20 ");
+      mThreshold = true;
     } else if (m & MOVEMENT_FROM_3_TO_1) {
       Serial.print("-20 ");
+      mThreshold = true;
     } else {
       Serial.print("0 ");
     }
@@ -184,10 +210,10 @@ void loop() {
     //plot a pulse for 2-4 - orange spikes
     if (m & MOVEMENT_FROM_2_TO_4) {
       Serial.println("20 ");
-      health += 20;
+      mThreshold = true;
     } else if (m & MOVEMENT_FROM_4_TO_2) {
       Serial.println("-20 ");
-      health -= 20;
+      mThreshold = true;
     } else {
       Serial.println("0 ");
     }
@@ -196,24 +222,96 @@ void loop() {
 
 
 
-  // switches check
+
+  // hurtful movement detected                 // ------- maybe timer for how often hurt can happen
+  if (mThreshold == true) {
+    // decrease health
+    health = constrain(health -= healthVal, 0, 100);
+    // start timer
+    last_time_hurt = now;
+    // reset threshold detector
+    mThreshold = false;
+    // show hurt
+    hurtResponse();
+  }
+
+  // take recoveryTime minutes to perk back up
+  if (now - last_time_hurt < recoveryTime) {
+    perkUp();
+    //Serial.println("perking");
+  } else {
+    // done perking up, start healing
+    healingMode();
+    //Serial.println("perk done");
+  }
+
+
+  // switches check (1 is default, 0 is hit)
   buttonState0 = digitalRead(init_switch0);
   buttonState1 = digitalRead(init_switch1);
-  /*
-    Serial.print(" read_0: ");
-    Serial.println(buttonState0);
-    Serial.print(" read_1: ");
-    Serial.println(buttonState1);
-    Serial.println(" ");
-  */
+  buttonState2 = digitalRead(init_switch2);
+  printSwitches();
+
+  // intitalize motor positions
+  initializeMotorsManually();
+
+  // base
+  // run while button is down and not initialized
+  if (init0 == false && buttonState0 == 0) {
+    while (buttonState0 == 0) {
+      //Serial.println("...setting 0 pos M1");
+      s[0].setSpeed(500);
+      s[0].run();
+      buttonState0 = digitalRead(init_switch0);
+    }
+    init0 = true;
+  }
+  // if let go of button, set 0 pos
+  else if (init0 == true && buttonState0 == 1) {
+    // init start pos
+    s[0].setCurrentPosition(0);
+    Serial.println(" set 0 pos, M0 __________________________________________________");
+    // make sure it isn't running above all the time
+    init0 = false;
+  }
+
+  // branch
+  if (init1 == false && buttonState1 == 0) {
+    // run motor 1 (branch)
+    while (buttonState1 == 0) {
+      //Serial.println("...setting 0 pos M1");
+      s[1].setSpeed(-500);
+      s[1].run();
+      buttonState1 = digitalRead(init_switch1);
+    }
+    init1 = true;
+  }
+  // if let go of button, set 0 pos
+  else if (init1 == true && buttonState1 == 1) {
+    // init start pos
+    s[1].setCurrentPosition(0);
+    Serial.println(" set 0 pos, M1 __________________________________________________");
+    // make sure it isn't running above all the time
+    init1 = false;
+  }
+
+  // base + branch forward
+  if (buttonState2 == 0) {
+    // run motor 1 (branch)
+    while (buttonState2 == 0) {
+      //Serial.println("...setting 0 pos M1");
+      s[0].setSpeed(-500);
+      s[0].run();
+      s[1].setSpeed(500);
+      s[1].run();
+      buttonState2 = digitalRead(init_switch2);
+    }
+  }
+
 
   // LED update
-  r = constrain (health, 0, 200);
-  Serial.println(r);
-  
   for (int i = 0; i <= N_LEDS; i++) {
-    //strip.setPixelColor(i, r, g, b);
-    strip.setPixelColor(i, r, 0, 0);
+    strip.setPixelColor(i, r, g, b);
   }
   strip.show();
 
@@ -237,63 +335,37 @@ void loop() {
     }
   */
 
-  /* library notes */
-  /* accel + can run simultaneously, but is dependent on loop, so println will harm speed */
-  // run() - needs a targetpos:   stepper.moveTo(4096);
-  /* expensive calls - harm run! */
-  //Serial.println(stepper.currentPosition());
-  //Serial.println("speed: " + String(stepper.speed()));
-  /* can be used to check did the stepper stop at position? */
-  //Serial.println(stepper.isRunning ());
 
-  /* constant + can run simultaneously */
-  // runSpeed()
-  // runSpeedToPosition()
-
-  /* accel + blocks */
-  // runToNewPosition() // to target
-  // runToPosition()
-
-  /*
-    Serial.println("Accel+");
-    mAccel(stepsToMove);
-    delay(1000);
-
-    Serial.println("Accel-");
-    mAccel(0);
-    delay(1000);
-
-    Serial.println("Constant");
-    mConstant(4096, 500);
-    // Set the current position to 0:
-    stepper.setCurrentPosition(0);
-    delay(1000);
-  */
-
-
-  //Serial.println(sA[0].isRunning ());
-  /*
-    //s[2].setSpeed(500);
-    s[2].moveTo(4096);
-    s[2].run();
-
-
-    s[2].setSpeed(500);
-    s[2].runSpeed();
-  */
-
-  /*
-    int stepsToMove = calcSteps (0.5);
-    Serial.println("Accel down");
-    mAccel(-stepsToMove, 2);
-    delay(1000);
-
-    Serial.println("Accel to 0");
-    mAccel(0, 2);
-    delay(1000);
-  */
 }
 
+void hurtResponse() {
+  // move down
+
+  // retract leaves
+  // dim lights
+  ledBri = 0;
+  strip.setBrightness(ledBri);
+
+}
+
+void perkUp() {
+  // slowly move motors up X steps
+  // calculated so steps add up to 'how far is back up' in the amount of recoveryTime
+  // motor values corresponding to amount of overall health.
+  ledBri = constrain(ledBri += 1, 0, 255);
+  strip.setBrightness(ledBri);
+
+}
+
+void healingMode() {
+  // increase health slowly
+  health = constrain(health += healthVal, 0, 100);
+  // increase lights slowly
+
+  // lights bright
+  ledBri = 255;
+  strip.setBrightness(ledBri);
+}
 
 
 void sadArm(int _stepper) {
@@ -308,7 +380,50 @@ void sadArm(int _stepper) {
   delay(1000);
 }
 
+void initializeMotorsManually() {
+    
+  }
 
+
+void mAccel(int targetPos, int _stepper) {
+  // Set target position:
+  s[_stepper].moveTo(targetPos);
+
+  // Run to position with set speed and acceleration:
+  s[_stepper].runToPosition();
+
+  Serial.println("speed: " + String(s[_stepper].speed()));
+}
+
+
+void mConstant(int _steps, int _speed, int _stepper) {
+  while (s[_stepper].currentPosition() != _steps) {
+    s[_stepper].setSpeed(_speed);
+    s[_stepper].runSpeed();
+  }
+  Serial.println("speed: " + String(s[_stepper].speed()));
+}
+
+int calcSteps(float rev) { // Ex. 0.2 = 20% rev, 1 = 100% (one rev), 2 = 200% (2 rev)
+  int steps = 0;
+  steps = int(4096 * rev);
+  return steps;
+}
+
+void printSwitches() {
+  Serial.print(" read_0: ");
+  Serial.println(buttonState0);
+  Serial.print(" read_1: ");
+  Serial.println(buttonState1);
+  Serial.print(" read_2: ");
+  Serial.println(buttonState2);
+  Serial.println(" ");
+}
+
+
+/* NOT IN USE */
+
+/*
 void initToZeroPos_main(int _stepper) {
   //turn clockwise until hit switch
   s[_stepper].setSpeed(500);
@@ -351,33 +466,7 @@ void mRunUntil_switchHit (int _stepper) {
     s[_stepper].run();
   }
 }
-
-
-void mAccel(int targetPos, int _stepper) {
-  // Set target position:
-  s[_stepper].moveTo(targetPos);
-
-  // Run to position with set speed and acceleration:
-  s[_stepper].runToPosition();
-
-  Serial.println("speed: " + String(s[_stepper].speed()));
-}
-
-
-void mConstant(int _steps, int _speed, int _stepper) {
-  while (s[_stepper].currentPosition() != _steps) {
-    s[_stepper].setSpeed(_speed);
-    s[_stepper].runSpeed();
-  }
-  Serial.println("speed: " + String(s[_stepper].speed()));
-}
-
-int calcSteps(float rev) { // Ex. 0.2 = 20% rev, 1 = 100% (one rev), 2 = 200% (2 rev)
-  int steps = 0;
-  steps = int(4096 * rev);
-  return steps;
-}
-
+*/
 
 
 /********** HELPERS */
