@@ -22,6 +22,7 @@
 /*
    IMPORTANT !!!!!!!!!!!!!!!!!
    Always set zero positions on buttons when installation starts.
+   Listen - hold 0 and 1 a bit at a time, until it starts grinding. 2 moves both forward.
 */
 
 
@@ -164,64 +165,46 @@ void setup() {
   s[1].setCurrentPosition(0);
 
 
-  Serial.println("Started---------");
+  Serial.println("Started, set pos 0 for M0 and M1, adjust on buttons as needed.po");
 
   /*
-    // inital motor positions (DEBUG)
-    s[0].moveTo(-1000);
-    s[0].runToPosition();
+      // inital motor positions (DEBUG - GO FORWARD)
+      s[1].moveTo(1000);
+      s[1].runToPosition();
 
-    s[1].moveTo(1000);
-    s[1].runToPosition();
+      s[0].moveTo(-1000);
+      s[0].runToPosition();
   */
 }
 
 
+bool sensorPrint = false;
 
 void loop() {
 
+  /* INITALIZATION */
+  // switches check (1 is default, 0 is hit)
+  buttonState0 = digitalRead(init_switch0);
+  buttonState1 = digitalRead(init_switch1);
+  buttonState2 = digitalRead(init_switch2);
+  //printSwitches();
+
+  // intitalize motor positions
+  initializeMotorsManually();
+
+
+  /* SENSOR CHECK */
   // Check movement sensor
   detector.loop();
-
   uint32_t now = millis();
   if (now - last_time > sensorCheckTime) {
     uint8_t m = detector.getMovement();  //read movement state will clear it
-
-    // PLOTTER
-    // movement 1-3 (up - down) in blue
-    Serial.print(detector.getDerivativeOfDiff13());
-    Serial.print(" ");
-
-    //plot a pulse 1-3 - red spikes
-    if (m & MOVEMENT_FROM_1_TO_3) {
-      Serial.print("20 ");
-      mThreshold = true;
-    } else if (m & MOVEMENT_FROM_3_TO_1) {
-      Serial.print("-20 ");
-      mThreshold = true;
-    } else {
-      Serial.print("0 ");
-    }
-
-    // movement 2-4 (left - right) in green
-    Serial.print(detector.getDerivativeOfDiff24());
-    Serial.print(" ");
-
-    //plot a pulse for 2-4 - orange spikes
-    if (m & MOVEMENT_FROM_2_TO_4) {
-      Serial.println("20 ");
-      mThreshold = true;
-    } else if (m & MOVEMENT_FROM_4_TO_2) {
-      Serial.println("-20 ");
-      mThreshold = true;
-    } else {
-      Serial.println("0 ");
-    }
+    sensorCheck(m);
     last_time = now;
   }
 
 
-
+  /* MOVEMENT CONTROL */
 
   // hurtful movement detected                 // ------- maybe timer for how often hurt can happen
   if (mThreshold == true) {
@@ -246,68 +229,8 @@ void loop() {
   }
 
 
-  // switches check (1 is default, 0 is hit)
-  buttonState0 = digitalRead(init_switch0);
-  buttonState1 = digitalRead(init_switch1);
-  buttonState2 = digitalRead(init_switch2);
-  printSwitches();
 
-  // intitalize motor positions
-  initializeMotorsManually();
-
-  // base
-  // run while button is down and not initialized
-  if (init0 == false && buttonState0 == 0) {
-    while (buttonState0 == 0) {
-      //Serial.println("...setting 0 pos M1");
-      s[0].setSpeed(500);
-      s[0].run();
-      buttonState0 = digitalRead(init_switch0);
-    }
-    init0 = true;
-  }
-  // if let go of button, set 0 pos
-  else if (init0 == true && buttonState0 == 1) {
-    // init start pos
-    s[0].setCurrentPosition(0);
-    Serial.println(" set 0 pos, M0 __________________________________________________");
-    // make sure it isn't running above all the time
-    init0 = false;
-  }
-
-  // branch
-  if (init1 == false && buttonState1 == 0) {
-    // run motor 1 (branch)
-    while (buttonState1 == 0) {
-      //Serial.println("...setting 0 pos M1");
-      s[1].setSpeed(-500);
-      s[1].run();
-      buttonState1 = digitalRead(init_switch1);
-    }
-    init1 = true;
-  }
-  // if let go of button, set 0 pos
-  else if (init1 == true && buttonState1 == 1) {
-    // init start pos
-    s[1].setCurrentPosition(0);
-    Serial.println(" set 0 pos, M1 __________________________________________________");
-    // make sure it isn't running above all the time
-    init1 = false;
-  }
-
-  // base + branch forward
-  if (buttonState2 == 0) {
-    // run motor 1 (branch)
-    while (buttonState2 == 0) {
-      //Serial.println("...setting 0 pos M1");
-      s[0].setSpeed(-500);
-      s[0].run();
-      s[1].setSpeed(500);
-      s[1].run();
-      buttonState2 = digitalRead(init_switch2);
-    }
-  }
-
+  /* LIGHT CONTROL */
 
   // LED update
   for (int i = 0; i <= N_LEDS; i++) {
@@ -337,6 +260,8 @@ void loop() {
 
 
 }
+
+
 
 void hurtResponse() {
   // move down
@@ -380,9 +305,113 @@ void sadArm(int _stepper) {
   delay(1000);
 }
 
-void initializeMotorsManually() {
-    
+void sensorCheck(uint8_t m) {
+  // printout (plotter) or not
+  if (sensorPrint) {
+    // PLOTTER
+    // movement 1-3 (up - down) in blue
+    Serial.print(detector.getDerivativeOfDiff13());
+    Serial.print(" ");
+
+    //plot a pulse 1-3 - red spikes
+    if (m & MOVEMENT_FROM_1_TO_3) {
+      Serial.print("20 ");
+      mThreshold = true;
+    } else if (m & MOVEMENT_FROM_3_TO_1) {
+      Serial.print("-20 ");
+      mThreshold = true;
+    } else {
+      Serial.print("0 ");
+    }
+
+    // movement 2-4 (left - right) in green
+    Serial.print(detector.getDerivativeOfDiff24());
+    Serial.print(" ");
+
+    //plot a pulse for 2-4 - orange spikes
+    if (m & MOVEMENT_FROM_2_TO_4) {
+      Serial.println("20 ");
+      mThreshold = true;
+    } else if (m & MOVEMENT_FROM_4_TO_2) {
+      Serial.println("-20 ");
+      mThreshold = true;
+    } else {
+      Serial.println("0 ");
+    }
+  } else {
+    //plot a pulse 1-3 - red spikes
+    if (m & MOVEMENT_FROM_1_TO_3) {
+      mThreshold = true;
+    } else if (m & MOVEMENT_FROM_3_TO_1) {
+      mThreshold = true;
+    } else {
+    }
+
+    //plot a pulse for 2-4 - orange spikes
+    if (m & MOVEMENT_FROM_2_TO_4) {
+      mThreshold = true;
+    } else if (m & MOVEMENT_FROM_4_TO_2) {
+      mThreshold = true;
+    } else {
+    }
   }
+}
+
+// clean this up. Don't need init0 variables.
+void initializeMotorsManually() {
+  // base
+  // run while button is down and not initialized
+  if (init0 == false && buttonState0 == 0) {
+    while (buttonState0 == 0) {
+      //Serial.println("...setting 0 pos M1");
+      s[0].setSpeed(500);
+      s[0].run();
+      buttonState0 = digitalRead(init_switch0);
+    }
+    init0 = true;
+  }
+  // if let go of button, set 0 pos
+  else if (init0 == true && buttonState0 == 1) {
+    // init start pos
+    s[0].setCurrentPosition(0);
+    Serial.println(" set pos 0, M0 ____________________________");
+    // make sure it isn't running above all the time
+    init0 = false;
+  }
+
+  // branch
+  if (init1 == false && buttonState1 == 0) {
+    // run motor 1 (branch)
+    while (buttonState1 == 0) {
+      //Serial.println("...setting 0 pos M1");
+      s[1].setSpeed(-500);
+      s[1].run();
+      buttonState1 = digitalRead(init_switch1);
+    }
+    init1 = true;
+  }
+  // if let go of button, set 0 pos
+  else if (init1 == true && buttonState1 == 1) {
+    // init start pos
+    s[1].setCurrentPosition(0);
+    Serial.println(" set pos 0, M1 _____________________________");
+    // make sure it isn't running above all the time
+    init1 = false;
+  }
+
+  // base + branch forward
+  if (buttonState2 == 0) {
+    // run motor 1 (branch)
+    while (buttonState2 == 0) {
+      //Serial.println("...setting 0 pos M1");
+      s[0].setSpeed(-500);
+      s[0].run();
+      s[1].setSpeed(500);
+      s[1].run();
+      buttonState2 = digitalRead(init_switch2);
+    }
+  }
+}
 
 
 void mAccel(int targetPos, int _stepper) {
@@ -424,7 +453,7 @@ void printSwitches() {
 /* NOT IN USE */
 
 /*
-void initToZeroPos_main(int _stepper) {
+  void initToZeroPos_main(int _stepper) {
   //turn clockwise until hit switch
   s[_stepper].setSpeed(500);
 
@@ -437,9 +466,9 @@ void initToZeroPos_main(int _stepper) {
     //Serial.println(s[_stepper].currentPosition());
     s[_stepper].run();
   }
-}
+  }
 
-void initToZeroPos_extended(int _stepper) {
+  void initToZeroPos_extended(int _stepper) {
   //turn clockwise until hit switch
   s[_stepper].setSpeed(-500);
 
@@ -452,10 +481,10 @@ void initToZeroPos_extended(int _stepper) {
     //Serial.println(s[_stepper].currentPosition());
     s[_stepper].run();
   }
-}
+  }
 
 
-void mRunUntil_switchHit (int _stepper) {
+  void mRunUntil_switchHit (int _stepper) {
   s[_stepper].setSpeed(500);
 
   if (buttonState0 == 0) {
@@ -465,7 +494,7 @@ void mRunUntil_switchHit (int _stepper) {
     Serial.println(s[_stepper].currentPosition());
     s[_stepper].run();
   }
-}
+  }
 */
 
 
