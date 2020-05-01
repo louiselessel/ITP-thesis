@@ -23,6 +23,8 @@
    IMPORTANT !!!!!!!!!!!!!!!!!
    Always set zero positions on buttons when installation starts.
    Listen - hold 0 and 1 a bit at a time, until it starts grinding. 2 moves both forward.
+
+   Check pos by quick press on 2
 */
 
 
@@ -30,6 +32,7 @@
 #include <AccelStepper.h>
 #include <Wire.h>
 #include "Grove_Human_Presence_Sensor.h"
+#include <ColorConverter.h>
 
 // LED Neopixels
 #define PIN A3         //defining the PWM pin
@@ -68,6 +71,8 @@ AccelStepper s[3];
 
 // Initialize LED neopixels
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(N_LEDS, PIN); //declared neopixel object
+ColorConverter converter;
+
 
 // Initialize sensor
 AK9753 movementSensor;
@@ -79,11 +84,16 @@ int r = 255;
 int g = 255;
 int b = 255;
 
+int h = 50;         // hue
+int sat = 20;        // saturation
+int i = 100;        // intensity
+int change = 1;              // increment to change hue by
+
 // Movement Sensor
 // You need to adjust these sensitivities lower if you want to detect more far
 // but it will introduce more error detection
-float sensitivity_presence = 6.0;
-float sensitivity_movement = 10.0;
+float sensitivity_presence = 6;
+float sensitivity_movement = 6.0;
 int detect_interval = 30; //milliseconds
 PresenceDetector detector(movementSensor, sensitivity_presence, sensitivity_movement, detect_interval);
 uint32_t last_time;
@@ -107,11 +117,19 @@ bool init1 = false;
 // Logic
 int health = 100;
 int healthVal = 1;
-uint32_t recoveryTime = 5000;
+uint32_t recoveryTime = 30000;
 uint32_t last_time_hurt;
 bool mThreshold = false;
 int ledBri = 255;
 
+int printVar = 0;
+
+// Modes
+bool perkup = false;
+bool healthy = false;
+
+
+/* -------------------------------------------------------------------- */
 
 void setup() {
   Serial.begin(9600);
@@ -124,11 +142,9 @@ void setup() {
 
   // setup LED
   // Initialize the NeoPixel library.
-  strip.begin();
-  for (int i = 0; i <= N_LEDS; i++) {
-    strip.setPixelColor(i, 0, 0, 0);
-  }
-  strip.show();
+  strip.begin();    // initialize pixel strip
+  strip.clear();    // turn all LEDs off
+  strip.show();     // update strip
 
   // setup movement sensor
   if (movementSensor.initialize() == false) {
@@ -148,8 +164,8 @@ void setup() {
 
   s[1] = stepper1;
   s[1].setMaxSpeed(1000);
-  s[1].setSpeed(500);
-  s[1].setAcceleration(200);
+  s[1].setSpeed(50);
+  s[1].setAcceleration(10);
 
   s[2] = stepper2;
   s[2].setMaxSpeed(1000);
@@ -192,95 +208,135 @@ void loop() {
   // intitalize motor positions
   initializeMotorsManually();
 
+  uint32_t now = millis();
 
   /* SENSOR CHECK */
   // Check movement sensor
-  detector.loop();
-  uint32_t now = millis();
-  if (now - last_time > sensorCheckTime) {
-    uint8_t m = detector.getMovement();  //read movement state will clear it
-    sensorCheck(m);
-    last_time = now;
+  // only check if buttons have been used to initialize motors!
+  if (init0 && init1) {
+    detector.loop();
+
+    // check if time interval has passed
+    if (now - last_time > sensorCheckTime) {
+      uint8_t m = detector.getMovement();  //read movement state will clear it
+      sensorCheck(m);
+      last_time = now;
+    }
   }
-
-
-  /* MOVEMENT CONTROL */
-
-  // hurtful movement detected                 // ------- maybe timer for how often hurt can happen
-  if (mThreshold == true) {
-    // decrease health
-    health = constrain(health -= healthVal, 0, 100);
-    // start timer
-    last_time_hurt = now;
-    // reset threshold detector
-    mThreshold = false;
-    // show hurt
-    hurtResponse();
-  }
-
-  // take recoveryTime minutes to perk back up
-  if (now - last_time_hurt < recoveryTime) {
-    perkUp();
-    //Serial.println("perking");
-  } else {
-    // done perking up, start healing
-    healingMode();
-    //Serial.println("perk done");
-  }
-
-
 
   /* LIGHT CONTROL */
 
   // LED update
-  for (int i = 0; i <= N_LEDS; i++) {
+  
+  /*for (int i = 0; i <= N_LEDS; i++) {
     strip.setPixelColor(i, r, g, b);
+    }
+    strip.show();
+  */
+  // create a single color from hue, sat, intensity:
+  RGBColor color = converter.HSItoRGB(h, sat, i);
+
+  // loop over all the pixels:
+  for (int pixel = 0; pixel < N_LEDS; pixel++) {
+    strip.setPixelColor(pixel, color.red, color.green, color.blue);    // set the color for this pixel
+    //strip.show();   // update the strip
+    delay(10);
   }
   strip.show();
 
+  // increment hue to fade from red (0) to reddish orange (15) and back:
+  if (now - last_time > 100) {
+    h = h + change;
+    if (h < 50 || h > 100) {
+      change = -change;
+    }
+  }
+  
+
   delay(1);
 
+  /* MOVEMENT CONTROL */
+
+  // hurtful movement detectedws
+  if (mThreshold == true) {
+    Serial.println("hurting ...");
+    Serial.println(s[1].currentPosition());
+    // decrease health
+    health = constrain(health -= healthVal, 0, 100);
+    // start timer
+    last_time_hurt = now;
+    // show hurt
+    hurtResponse();
+    // reset threshold detector
+    mThreshold = false;
+
+    perkup = true;
+  }
 
 
-  /*
-    // Initialize
-    if (initialize == true) {
-      initToZeroPos_main(0);
-    }
-    else {
-      if (initialize1 == true) {
-        initToZeroPos_extended(1);
+  if (init0 && init1) {
+    // if enough seconds have pasts, start perking back up
+    if (now - last_time_hurt > recoveryTime) {
+      if (perkup) {
+        //Serial.println("perking ...");
+        perkUp();
+        // if reached 0
+        if (s[1].currentPosition() == long(0)) {
+          Serial.println("perked up");
+          perkup = false;
+          // done perking up, start healing
+          //healingMode();
+        }
       }
-      else {
-        sadArm(1);
-        sadArm(0);
-      }
     }
-  */
+  }
 
 
 }
 
+// MODES -------------------------------------------------------------
 
+
+void perkUp() {
+  // slowly move branch up to 0 steps - dependant on acceleration
+  s[1].moveTo(0);
+  s[1].run();
+
+  Serial.println(s[1].currentPosition());
+
+  // calculated so steps add up reto 'how far is back up' in the amount of recoveryTime
+  // motor values corresponding to amount of overall health.
+  ledBri = constrain(ledBri += 1, 0, 255);
+  strip.setBrightness(ledBri);
+}
 
 void hurtResponse() {
-  // move down
-
-  // retract leaves
+  Serial.println("HURT");
   // dim lights
   ledBri = 0;
   strip.setBrightness(ledBri);
 
+  // stop other movement
+  perkup = false;
+  s[1].stop();
+  s[1].setAcceleration(10);
+
+  // move down until position is reached         // Adjust timing - acceleration 6 seconds to drop
+  s[1].moveTo(1800);
+  s[1].runToPosition();
+  //s[1].moveTo(0);
+  //s[1].runToPosition();
+
+  Serial.println(s[1].currentPosition());
+  Serial.println("HURT DONE");
+  s[1].setAcceleration(3);
+
+  // retract leaves
 }
 
-void perkUp() {
-  // slowly move motors up X steps
-  // calculated so steps add up to 'how far is back up' in the amount of recoveryTime
-  // motor values corresponding to amount of overall health.
-  ledBri = constrain(ledBri += 1, 0, 255);
-  strip.setBrightness(ledBri);
 
-}
+
+
 
 void healingMode() {
   // increase health slowly
@@ -293,17 +349,11 @@ void healingMode() {
 }
 
 
-void sadArm(int _stepper) {
-  // move rev
-  int stepsToMove = calcSteps (0.2);
-  Serial.println("Accel down");
-  mAccel(stepsToMove, _stepper);
-  delay(1000);
 
-  Serial.println("Accel to 0");
-  mAccel(0, _stepper);
-  delay(1000);
-}
+
+
+
+// -------------------------------------------------------------
 
 void sensorCheck(uint8_t m) {
   // printout (plotter) or not
@@ -357,30 +407,26 @@ void sensorCheck(uint8_t m) {
   }
 }
 
-// clean this up. Don't need init0 variables.
+// -------------------------------------------------------------
+
 void initializeMotorsManually() {
+
   // base
-  // run while button is down and not initialized
-  if (init0 == false && buttonState0 == 0) {
+  // run while button is down
+  if (buttonState0 == 0) {
     while (buttonState0 == 0) {
       //Serial.println("...setting 0 pos M1");
       s[0].setSpeed(500);
       s[0].run();
       buttonState0 = digitalRead(init_switch0);
     }
-    init0 = true;
-  }
-  // if let go of button, set 0 pos
-  else if (init0 == true && buttonState0 == 1) {
-    // init start pos
+    // init start pos on release
     s[0].setCurrentPosition(0);
     Serial.println(" set pos 0, M0 ____________________________");
-    // make sure it isn't running above all the time
-    init0 = false;
   }
 
   // branch
-  if (init1 == false && buttonState1 == 0) {
+  if (buttonState1 == 0) {
     // run motor 1 (branch)
     while (buttonState1 == 0) {
       //Serial.println("...setting 0 pos M1");
@@ -388,32 +434,52 @@ void initializeMotorsManually() {
       s[1].run();
       buttonState1 = digitalRead(init_switch1);
     }
-    init1 = true;
-  }
-  // if let go of button, set 0 pos
-  else if (init1 == true && buttonState1 == 1) {
-    // init start pos
+    // init start pos on release
     s[1].setCurrentPosition(0);
     Serial.println(" set pos 0, M1 _____________________________");
-    // make sure it isn't running above all the time
-    init1 = false;
   }
 
-  // base + branch forward
+  // base + branch run forward
   if (buttonState2 == 0) {
-    // run motor 1 (branch)
+
     while (buttonState2 == 0) {
-      //Serial.println("...setting 0 pos M1");
       s[0].setSpeed(-500);
       s[0].run();
-      s[1].setSpeed(500);
-      s[1].run();
+      //s[1].setSpeed(500);
+      //s[1].run();
       buttonState2 = digitalRead(init_switch2);
     }
+
+
+    Serial.println("Sensor enabled, after button 0 and 1 adjusted motors");
+    init0 = true;
+    init1 = true;
+
+    Serial.println("positions: ");
+    Serial.println(s[0].currentPosition());
+    Serial.println(s[1].currentPosition());
+    Serial.print("printVar: ");
+    Serial.println(printVar);
   }
 }
 
 
+// OLD -------------------------------------------------------------
+
+void sadArm(int _stepper) {
+  // move rev
+  int stepsToMove = calcSteps (0.2);
+  Serial.println("Accel down");
+  mAccel(stepsToMove, _stepper);
+  delay(1000);
+
+  Serial.println("Accel to 0");
+  mAccel(0, _stepper);
+  delay(1000);
+}
+
+
+// blocks
 void mAccel(int targetPos, int _stepper) {
   // Set target position:
   s[_stepper].moveTo(targetPos);
@@ -450,52 +516,7 @@ void printSwitches() {
 }
 
 
-/* NOT IN USE */
 
-/*
-  void initToZeroPos_main(int _stepper) {
-  //turn clockwise until hit switch
-  s[_stepper].setSpeed(500);
-
-  if (buttonState0 == 0) {
-    Serial.println("Switch Hit - main");
-    s[_stepper].setCurrentPosition(0);
-    initialize = false;
-    //Serial.println(s[_stepper].currentPosition());
-  } else {
-    //Serial.println(s[_stepper].currentPosition());
-    s[_stepper].run();
-  }
-  }
-
-  void initToZeroPos_extended(int _stepper) {
-  //turn clockwise until hit switch
-  s[_stepper].setSpeed(-500);
-
-  if (buttonState1 == 0) {
-    Serial.println("Switch Hit - extended");
-    s[_stepper].setCurrentPosition(0);
-    initialize1 = false;
-    //Serial.println(s[_stepper].currentPosition());
-  } else {
-    //Serial.println(s[_stepper].currentPosition());
-    s[_stepper].run();
-  }
-  }
-
-
-  void mRunUntil_switchHit (int _stepper) {
-  s[_stepper].setSpeed(500);
-
-  if (buttonState0 == 0) {
-    Serial.println("Button");
-    s[_stepper].setCurrentPosition(0);
-  } else {
-    Serial.println(s[_stepper].currentPosition());
-    s[_stepper].run();
-  }
-  }
-*/
 
 
 /********** HELPERS */
