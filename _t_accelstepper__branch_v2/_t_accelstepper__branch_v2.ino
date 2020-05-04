@@ -88,12 +88,13 @@ int h = 50;         // hue
 int sat = 20;        // saturation
 int i = 100;        // intensity
 int change = 1;              // increment to change hue by
+RGBColor color;
 
 // Movement Sensor
 // You need to adjust these sensitivities lower if you want to detect more far
 // but it will introduce more error detection
-float sensitivity_presence = 6;
-float sensitivity_movement = 6.0;
+float sensitivity_presence = 1.0;
+float sensitivity_movement = 4.0; //
 int detect_interval = 30; //milliseconds
 PresenceDetector detector(movementSensor, sensitivity_presence, sensitivity_movement, detect_interval);
 uint32_t last_time;
@@ -172,7 +173,7 @@ void setup() {
   s[2].setSpeed(500);
   s[2].setAcceleration(200);
 
-  init0 = false;
+  init0 = false; // ----------- these should be false when motor is ON, set true for debug.
   init1 = false;
 
   // set initial positions - make sure to adjust on buttons after startup
@@ -194,7 +195,7 @@ void setup() {
 }
 
 
-bool sensorPrint = false;
+bool sensorPrint = true;
 
 void loop() {
 
@@ -227,14 +228,8 @@ void loop() {
   /* LIGHT CONTROL */
 
   // LED update
-  
-  /*for (int i = 0; i <= N_LEDS; i++) {
-    strip.setPixelColor(i, r, g, b);
-    }
-    strip.show();
-  */
   // create a single color from hue, sat, intensity:
-  RGBColor color = converter.HSItoRGB(h, sat, i);
+  color = converter.HSItoRGB(h, sat, i);
 
   // loop over all the pixels:
   for (int pixel = 0; pixel < N_LEDS; pixel++) {
@@ -251,7 +246,6 @@ void loop() {
       change = -change;
     }
   }
-  
 
   delay(1);
 
@@ -304,7 +298,7 @@ void perkUp() {
 
   Serial.println(s[1].currentPosition());
 
-  // calculated so steps add up reto 'how far is back up' in the amount of recoveryTime
+  // calculated so steps add up to 'how far is back up' in the amount of recoveryTime
   // motor values corresponding to amount of overall health.
   ledBri = constrain(ledBri += 1, 0, 255);
   strip.setBrightness(ledBri);
@@ -313,8 +307,14 @@ void perkUp() {
 void hurtResponse() {
   Serial.println("HURT");
   // dim lights
-  ledBri = 0;
-  strip.setBrightness(ledBri);
+  ledBri = strip.getBrightness();
+  
+  while (ledBri > 50) {
+    strip.setBrightness(ledBri);
+    delay(40);
+    strip.show();
+    ledBri--;
+  }
 
   // stop other movement
   perkup = false;
@@ -366,10 +366,10 @@ void sensorCheck(uint8_t m) {
     //plot a pulse 1-3 - red spikes
     if (m & MOVEMENT_FROM_1_TO_3) {
       Serial.print("20 ");
-      mThreshold = true;
+      //mThreshold = true;
     } else if (m & MOVEMENT_FROM_3_TO_1) {
       Serial.print("-20 ");
-      mThreshold = true;
+      //mThreshold = true;
     } else {
       Serial.print("0 ");
     }
@@ -391,9 +391,9 @@ void sensorCheck(uint8_t m) {
   } else {
     //plot a pulse 1-3 - red spikes
     if (m & MOVEMENT_FROM_1_TO_3) {
-      mThreshold = true;
+      //mThreshold = true;
     } else if (m & MOVEMENT_FROM_3_TO_1) {
-      mThreshold = true;
+      //mThreshold = true;
     } else {
     }
 
